@@ -4,6 +4,7 @@ const { PrismaClient } = require("@prisma/client");
 
 const express = require("express");
 const cors = require("cors");
+const { idetifyValidation } = require("./validation/validation");
 
 const app = express();
 const prisma = new PrismaClient();
@@ -20,8 +21,19 @@ app.get("/health", (req, res) => {
 app.get("/", (req, res) => res.send("Node.js API on Render.com"));
 
 app.post("/identify", async (req, res) => {
-  const email = req.body.email;
-  const phoneNumber = req.body.phoneNumber;
+  const orgBody = req.body;
+  const parsedBody = idetifyValidation.safeParse(orgBody);
+
+  if (!parsedBody.success) {
+    return res.status(414).json({
+      message:
+        "Incorrect inputs. Please congirm email & phoneNumber are in string format and in correct format. Also, you must provide atleast an email or a phoneNumber ",
+    });
+  }
+
+  const email = orgBody.email === null ? "" : orgBody.email;
+  const phoneNumber = orgBody.phoneNumber === null ? "" : orgBody.phoneNumber;
+
   const now = new Date();
 
   var contacts = await prisma.contact.findMany({
@@ -35,8 +47,10 @@ app.post("/identify", async (req, res) => {
   var linkPrecedence = null;
 
   if (contacts.length == 0) {
+    //first time entry of email and/or number.
     linkPrecedence = "primary";
   } else {
+    //duplicate, hence secondary
     var isPrimary = false;
     var primaryContact = null;
     linkPrecedence = "secondary";
@@ -64,16 +78,39 @@ app.post("/identify", async (req, res) => {
           (contact) => contact.id != primaryContact.id
         );
         updateContacts(contacts, linkedId);
-
-        const response = await generateResponse(primaryId);
-
-        return res.json(response);
+      } else {
+        //check if new info, then create contact.
+        await shouldGenerateContact(
+          contacts,
+          email,
+          phoneNumber,
+          linkedId,
+          linkPrecedence
+        );
       }
+
+      const response = await generateResponse(primaryId);
+
+      return res.status(200).json(response);
     } else {
       /*meaning all are secondary contact, so can take linkedId of 
         any of the contact to get the id of primary contact.  */
       primaryId = contacts[0].linkedId;
       linkedId = contacts[0].linkedId;
+
+      //check if new info, then create contact.
+
+      await shouldGenerateContact(
+        contacts,
+        email,
+        phoneNumber,
+        linkedId,
+        linkPrecedence
+      );
+
+      const response = await generateResponse(primaryId);
+
+      return res.status(200).json(response);
     }
   }
 
@@ -91,7 +128,7 @@ app.post("/identify", async (req, res) => {
 
   const response = await generateResponse(primaryId);
 
-  return res.json(response);
+  return res.status(200).json(response);
 });
 
 const createContact = async (
@@ -196,6 +233,38 @@ const generateResponse = async (primaryId) => {
   });
 
   return obj;
+};
+
+const shouldGenerateContact = async (
+  contacts,
+  email,
+  phoneNumber,
+  linkedId,
+  linkPrecedence
+) => {
+  var hasNewEmail = true;
+  var hasNewNumber = true;
+
+  const now = new Date();
+
+  contacts.map((contact, id) => {
+    if (email.length != 0 && email === contact.email) {
+      hasNewEmail = false;
+    }
+
+    if (phoneNumber.length != 0 && phoneNumber === contact.phoneNumber) {
+      hasNewNumber = false;
+    }
+  });
+
+  if (
+    (email.length != 0 && hasNewEmail) ||
+    (phoneNumber.length != 0 && hasNewNumber)
+  ) {
+    await createContact(email, phoneNumber, linkedId, linkPrecedence, now);
+  }
+
+  return;
 };
 
 app.listen(3000);
