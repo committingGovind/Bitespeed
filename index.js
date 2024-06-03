@@ -17,6 +17,8 @@ app.get("/health", (req, res) => {
   });
 });
 
+app.get("/", (req, res) => res.send("Node.js on Vercel"));
+
 app.post("/identify", async (req, res) => {
   const email = req.body.email;
   const phoneNumber = req.body.phoneNumber;
@@ -202,3 +204,5 @@ process.on("SIGINT", async () => {
   await prisma.$disconnect();
   process.exit(0);
 });
+
+module.exports = app;
