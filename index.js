@@ -17,7 +17,7 @@ app.get("/health", (req, res) => {
   });
 });
 
-app.get("/", (req, res) => res.send("Node.js on Vercel"));
+app.get("/", (req, res) => res.send("Node.js API on Render.com"));
 
 app.post("/identify", async (req, res) => {
   const email = req.body.email;
